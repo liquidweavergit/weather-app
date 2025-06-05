@@ -11,7 +11,7 @@
 
 ### 1.0 Docker Development Environment Setup ⭐ P0
 - [x] **1.1** Write tests for Docker container validation and health checks
-- [ ] **1.2** Initialize Git repository with .gitignore and Docker ignore files
+- [x] **1.2** Initialize Git repository with .gitignore and Docker ignore files
 - [ ] **1.3** Create Dockerfile for development and production environments
 - [ ] **1.4** Configure docker-compose.yml with all services (app, postgres, redis)
 - [ ] **1.5** Create .env.example and Docker environment validation
