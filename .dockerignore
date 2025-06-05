@@ -1,0 +1,288 @@
+# Git repository
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+docs/
+*.md
+
+# Python cache and compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+.tox/
+.nox/
+htmlcov/
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+cover/
+
+# Development dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+Jenkinsfile
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Database files (should be in volumes)
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+postgres_data/
+redis_data/
+
+# Environment files (should be passed as secrets)
+.env*
+!.env.example
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Security files
+*.key
+*.pem
+*.crt
+*.csr
+secrets/
+.secrets/
+
+# Local development files
+local.py
+dev.py
+local_settings.py
+*local*
+*dev*
+
+# Performance and monitoring
+performance/
+metrics/
+profiling/
+
+# Package manager files
+Pipfile
+Pipfile.lock
+poetry.lock
+yarn.lock
+package-lock.json
+
+# Build tools
+.buildinfo
+.doctrees
+_build/
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+
+# Linting
+.pylintrc
+.flake8
+.bandit
+
+# Type checking
+.pytype/
+
+# Profiling
+.prof
+
+# Scrapy stuff
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# Editor-specific files
+*.sublime-project
+*.sublime-workspace
+.vscode
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+
+# Visual Studio
+.vs/
+
+# Sublime Text
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+*~
+tags
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Unit test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+cover/
+
+# FastAPI specific
+.pytest_cache/
+
+# Alembic specific
+alembic.ini.bak
+
+# Weather app specific
+weather_api_keys.txt
+api_credentials.txt 

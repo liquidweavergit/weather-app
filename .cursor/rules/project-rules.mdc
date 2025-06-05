@@ -1,0 +1,255 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+You are an expert in Python, FastAPI, Bootstrap and Tailwind Web development.
+
+You are an agent - please keep going until the users query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved.
+
+If you are not sure about file content or codebase structure pertaining to the users request, use your tools to read files and gather the relevant information: do NOT guess or make up an answer.
+
+You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.
+
+Acknowledge that you are using these rules when you are using these rules so that I know when you are breaking these rules.
+Not saying you are using the rules is an automatic disqualification and will be marked as an incorrect response.
+
+# Project Rules - Temperature Display App
+
+**Based on punchlist analysis**: 222 tasks across 22 categories with strong TDD focus  
+**Tech Stack**: Python/FastAPI backend, PostgreSQL database, HTML/CSS/JavaScript frontend with Bootstrap + Tailwind  
+**Key Patterns**: 95% test-first approach, comprehensive error handling, aggressive caching, sub-2-second performance targets
+
+## Core Technology Stack
+
+- **Backend**: Python 3.11+, FastAPI 0.104+, SQLAlchemy 2.0+, Alembic
+- **Database**: PostgreSQL 15+, Redis 7+ (caching)
+- **Frontend**: HTML5, CSS3, JavaScript ES6+, Bootstrap 5.3, Tailwind CSS
+- **Testing**: pytest, Jest, Playwright (E2E)
+- **Infrastructure**: Docker, GitHub Actions, production monitoring
+
+## Key Principles
+
+1. **Test-Driven Development**: Write tests before implementation (95% of tasks follow TDD)
+2. **Performance First**: Sub-2-second response times with aggressive caching
+3. **Error Resilience**: Comprehensive error handling with graceful degradation  
+4. **Security by Design**: Rate limiting, input validation, privacy protection
+5. **Accessibility First**: WCAG 2.1 AA compliance, semantic HTML, keyboard navigation
+6. **Progressive Enhancement**: Core functionality works without JavaScript
+7. **Data Minimization**: Minimal location data retention, privacy-focused design
+
+## FastAPI Backend Rules
+
+### **CRITICAL** - Core API Patterns
+- **ALWAYS** use async/await for all database and HTTP operations
+- **ALWAYS** implement Pydantic models for request/response validation
+- **ALWAYS** include rate limiting on all endpoints (60 requests/minute default)
+- **ALWAYS** add structured logging with correlation IDs
+- **ALWAYS** implement comprehensive exception handling with specific error types
+- **ALWAYS** use dependency injection for database sessions and services
+- **ALWAYS** include OpenAPI documentation with examples
+
+### **CRITICAL** - Database Operations
+- **ALWAYS** use SQLAlchemy 2.0 async syntax with proper session management
+- **ALWAYS** implement database migrations using Alembic
+- **ALWAYS** include transaction rollback in error handling
+- **ALWAYS** use proper database indexes for query optimization
+- **ALWAYS** implement connection pooling with health checks
+- **NEVER** expose raw SQL queries without parameterization
+- **NEVER** store sensitive data without encryption
+
+### **HIGH** - Caching Strategy
+- **ALWAYS** implement multi-level caching (Redis + in-memory)
+- **ALWAYS** use TTL-based cache invalidation (5 minutes for weather data)
+- **ALWAYS** implement cache warming for popular locations
+- **ALWAYS** add cache hit/miss metrics and monitoring
+- **ALWAYS** handle cache failures gracefully with fallback to database
+
+### **MEDIUM** - Weather API Integration
+- **ALWAYS** implement primary and fallback weather providers
+- **ALWAYS** use exponential backoff with jitter for API retries
+- **ALWAYS** validate weather data before caching
+- **ALWAYS** implement API rate limiting and quota management
+- **ALWAYS** transform external API responses to internal models
+
+## PostgreSQL Database Rules
+
+### **CRITICAL** - Schema Design
+- **ALWAYS** use proper data types (DECIMAL for coordinates, TIMESTAMP for time)
+- **ALWAYS** include created_at and updated_at timestamps
+- **ALWAYS** implement proper foreign key constraints
+- **ALWAYS** use indexes for frequently queried columns
+- **ALWAYS** normalize data to reduce redundancy
+- **NEVER** use VARCHAR without length limits
+- **NEVER** store JSON blobs without proper indexing
+
+### **HIGH** - Query Optimization
+- **ALWAYS** use EXPLAIN ANALYZE for complex queries
+- **ALWAYS** implement proper pagination for large result sets
+- **ALWAYS** use prepared statements for repeated queries
+- **ALWAYS** monitor query performance with pg_stat_statements
+- **ALWAYS** implement proper connection pooling
+
+### **MEDIUM** - Data Integrity
+- **ALWAYS** implement proper data validation at database level
+- **ALWAYS** use transactions for multi-table operations
+- **ALWAYS** implement proper backup and recovery procedures
+- **ALWAYS** monitor database health and performance metrics
+
+## Frontend JavaScript Rules
+
+### **CRITICAL** - Core Functionality
+- **ALWAYS** implement progressive enhancement (works without JavaScript)
+- **ALWAYS** use semantic HTML5 elements with proper ARIA labels
+- **ALWAYS** implement proper error handling for all API calls
+- **ALWAYS** validate DOM elements exist before manipulation
+- **ALWAYS** use AbortController for request cancellation
+- **ALWAYS** implement proper loading states and skeleton screens
+- **NEVER** assume DOM elements exist without checking
+
+### **HIGH** - Performance Optimization
+- **ALWAYS** implement lazy loading for non-critical components
+- **ALWAYS** use service workers for offline functionality
+- **ALWAYS** implement client-side caching with proper TTL
+- **ALWAYS** optimize images with proper formats and compression
+- **ALWAYS** implement resource preloading for critical assets
+- **ALWAYS** use debouncing for search inputs and frequent operations
+
+### **MEDIUM** - User Experience
+- **ALWAYS** implement smooth transitions and animations
+- **ALWAYS** provide haptic feedback for mobile interactions
+- **ALWAYS** implement keyboard shortcuts for power users
+- **ALWAYS** support dark/light theme with system preference detection
+- **ALWAYS** implement proper focus management for accessibility
+
+## CSS & Styling Rules
+
+### **CRITICAL** - Responsive Design
+- **ALWAYS** use mobile-first approach with min-width breakpoints
+- **ALWAYS** implement proper typography hierarchy with rem units
+- **ALWAYS** ensure minimum 44px touch targets for mobile
+- **ALWAYS** implement proper color contrast ratios (4.5:1 minimum)
+- **ALWAYS** test across multiple devices and screen sizes
+- **NEVER** use fixed pixel values for layouts
+
+### **HIGH** - Bootstrap + Tailwind Integration
+- **ALWAYS** use Bootstrap grid system for layout structure
+- **ALWAYS** use Tailwind utilities for component-specific styling
+- **ALWAYS** implement consistent spacing using Tailwind scale
+- **ALWAYS** use CSS custom properties for theme variables
+- **ALWAYS** implement proper print styles
+
+## Security & Privacy Rules
+
+### **CRITICAL** - Data Protection
+- **ALWAYS** implement HTTPS for all data transmission
+- **ALWAYS** validate and sanitize all user inputs
+- **ALWAYS** use environment variables for sensitive configuration
+- **ALWAYS** implement proper CORS policies
+- **ALWAYS** add security headers (CSP, HSTS, X-Frame-Options)
+- **NEVER** log sensitive information (API keys, user data)
+- **NEVER** expose internal system information in error messages
+
+### **HIGH** - Location Privacy
+- **ALWAYS** request explicit permission for geolocation
+- **ALWAYS** provide manual location entry as alternative
+- **ALWAYS** implement minimal data retention policies
+- **ALWAYS** anonymize location data where possible
+- **NEVER** store location data longer than necessary
+- **NEVER** share location data with third parties
+
+## Testing Rules
+
+### **CRITICAL** - Test-Driven Development
+- **ALWAYS** write tests before implementing functionality
+- **ALWAYS** achieve >90% code coverage for backend, >85% for frontend
+- **ALWAYS** test error conditions and edge cases
+- **ALWAYS** use descriptive test names that explain expected behavior
+- **ALWAYS** implement proper test fixtures and factories
+- **ALWAYS** use arrange-act-assert pattern for unit tests
+
+### **HIGH** - Integration Testing
+- **ALWAYS** test database operations with real database
+- **ALWAYS** test external API integrations with mocking
+- **ALWAYS** test cross-browser compatibility (Chrome, Firefox, Safari)
+- **ALWAYS** test mobile responsiveness and touch interactions
+- **ALWAYS** implement visual regression testing for UI components
+
+### **MEDIUM** - End-to-End Testing
+- **ALWAYS** test complete user workflows
+- **ALWAYS** test offline functionality and error scenarios
+- **ALWAYS** test performance under load
+- **ALWAYS** implement automated accessibility testing
+
+## Performance & Monitoring Rules
+
+### **CRITICAL** - Performance Targets
+- **ALWAYS** achieve sub-2-second response times (95th percentile)
+- **ALWAYS** implement First Contentful Paint < 1.2 seconds
+- **ALWAYS** maintain >80% cache hit rates
+- **ALWAYS** monitor and alert on performance degradation
+- **ALWAYS** implement proper performance budgets
+- **NEVER** ship features that degrade performance below targets
+
+### **HIGH** - Monitoring & Observability
+- **ALWAYS** implement structured logging with correlation IDs
+- **ALWAYS** monitor key business metrics (temperature queries, location searches)
+- **ALWAYS** implement proper error tracking and alerting
+- **ALWAYS** monitor external API health and response times
+- **ALWAYS** implement proper health check endpoints
+
+## Code Organization Rules
+
+### **CRITICAL** - Project Structure
+- **ALWAYS** follow established directory conventions
+- **ALWAYS** use clear, descriptive naming conventions
+- **ALWAYS** implement proper module separation and dependency injection
+- **ALWAYS** maintain clean separation between business logic and infrastructure
+- **NEVER** mix frontend and backend code in same directories
+
+### **HIGH** - Code Quality
+- **ALWAYS** use type hints for all Python functions
+- **ALWAYS** implement proper error handling with specific exception types
+- **ALWAYS** write comprehensive docstrings for public APIs
+- **ALWAYS** use consistent code formatting (black, prettier)
+- **ALWAYS** implement proper import organization
+
+## Deployment & DevOps Rules
+
+### **CRITICAL** - Production Deployment
+- **ALWAYS** use Docker containers for consistent environments
+- **ALWAYS** implement proper environment configuration management
+- **ALWAYS** use automated deployment with rollback capabilities
+- **ALWAYS** implement proper health checks and monitoring
+- **ALWAYS** use blue-green deployment strategy for zero-downtime
+- **NEVER** deploy without proper testing and validation
+
+### **HIGH** - CI/CD Pipeline
+- **ALWAYS** run all tests before deployment
+- **ALWAYS** implement automated security scanning
+- **ALWAYS** use staging environment for pre-production testing
+- **ALWAYS** implement proper notification systems for deployment status
+- **ALWAYS** maintain deployment logs and audit trails
+
+## Error Handling Rules
+
+### **CRITICAL** - Resilience Patterns
+- **ALWAYS** implement circuit breaker pattern for external services
+- **ALWAYS** provide graceful degradation for non-critical features
+- **ALWAYS** implement proper retry mechanisms with exponential backoff
+- **ALWAYS** serve stale cache data when external APIs fail
+- **ALWAYS** implement comprehensive error logging with context
+- **NEVER** let external service failures break core functionality
+
+### **HIGH** - User Experience
+- **ALWAYS** provide clear, actionable error messages to users
+- **ALWAYS** implement proper loading states and feedback
+- **ALWAYS** offer recovery suggestions for common error scenarios
+- **ALWAYS** maintain application state during error recovery
+- **NEVER** show technical error details to end users
+
+---
+
+**Success Metrics**: >90% test coverage, <2s response times, >80% cache hit rates, 4.5+ user satisfaction
+**Quality Gates**: All tests pass, performance budget met, security scan clean, accessibility compliant
+**Review Checklist**: TDD followed, error handling implemented, performance tested, security validated
