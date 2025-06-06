@@ -14,6 +14,8 @@ You MUST plan extensively before each function call, and reflect extensively on 
 Acknowledge that you are using these rules when you are using these rules so that I know when you are breaking these rules.
 Not saying you are using the rules is an automatic disqualification and will be marked as an incorrect response.
 
+Do not interact with git on the users behalf.
+
 # Project Rules - Temperature Display App
 
 **Based on punchlist analysis**: 222 tasks across 22 categories with strong TDD focus  

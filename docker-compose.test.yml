@@ -1,0 +1,250 @@
+version: '3.8'
+
+# Temperature Display App - Testing Docker Compose Configuration
+# Isolated testing environment with test databases and services
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.test.yml up --build
+
+services:
+  # ====================================================================
+  # FastAPI Application Service - Testing
+  # ====================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: testing
+    container_name: temperature-app-test
+    environment:
+      # Test environment settings
+      - ENVIRONMENT=testing
+      - DEBUG=true
+      - RELOAD=false
+      
+      # Test database connection
+      - DATABASE_URL=postgresql+asyncpg://postgres:test_password@test_db:5432/temperature_app_test
+      
+      # Test Redis cache connection
+      - REDIS_URL=redis://test_redis:6379/1
+      
+      # Test API keys (use test/mock values)
+      - WEATHER_API_KEY=test_api_key_12345
+      - FALLBACK_WEATHER_API_KEY=test_fallback_key_12345
+      
+      # Test security settings
+      - SECRET_KEY=test-secret-key-for-testing-only-32-chars
+      
+      # Test configuration
+      - API_RATE_LIMIT=1000
+      - CACHE_TTL=60
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
+      
+      # Test server settings
+      - APP_PORT=8000
+      - APP_HOST=0.0.0.0
+      
+    ports:
+      - "8001:8000"  # Different port to avoid conflicts
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - ./test_logs:/app/logs
+    depends_on:
+      test_db:
+        condition: service_healthy
+      test_redis:
+        condition: service_healthy
+    networks:
+      - test-network
+    command: >
+      sh -c "
+        echo 'Waiting for test database...' &&
+        sleep 10 &&
+        echo 'Running database migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting test server...' &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ====================================================================
+  # Test PostgreSQL Database Service
+  # ====================================================================
+  test_db:
+    image: postgres:15-alpine
+    container_name: temperature-test-db
+    environment:
+      - POSTGRES_DB=temperature_app_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=test_password
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-test.sql:/docker-entrypoint-initdb.d/init-test.sql:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d temperature_app_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.max=10000
+      -c pg_stat_statements.track=all
+      -c max_connections=100
+      -c shared_buffers=128MB
+      -c effective_cache_size=512MB
+      -c log_statement=all
+      -c log_duration=on
+      -c log_min_duration_statement=0
+
+  # ====================================================================
+  # Test Redis Cache Service
+  # ====================================================================
+  test_redis:
+    image: redis:7-alpine
+    container_name: temperature-test-redis
+    environment:
+      - REDIS_MAXMEMORY=128mb
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    ports:
+      - "6380:6379"  # Different port to avoid conflicts
+    volumes:
+      - test_redis_data:/data
+      - ./docker/redis/redis.test.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly no
+      --save ""
+      --databases 16
+
+  # ====================================================================
+  # Test Runner Service
+  # ====================================================================
+  test_runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: testing
+    container_name: temperature-test-runner
+    environment:
+      # Test environment settings
+      - ENVIRONMENT=testing
+      - DATABASE_URL=postgresql+asyncpg://postgres:test_password@test_db:5432/temperature_app_test
+      - REDIS_URL=redis://test_redis:6379/1
+      - SECRET_KEY=test-secret-key-for-testing-only-32-chars
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - ./test_results:/app/test_results
+      - ./coverage_reports:/app/coverage_reports
+    depends_on:
+      test_db:
+        condition: service_healthy
+      test_redis:
+        condition: service_healthy
+    networks:
+      - test-network
+    working_dir: /app
+    profiles:
+      - test
+    command: >
+      sh -c "
+        echo 'Setting up test environment...' &&
+        sleep 15 &&
+        echo 'Running database migrations...' &&
+        alembic upgrade head &&
+        echo 'Running tests with coverage...' &&
+        pytest --cov=./ --cov-report=html:/app/coverage_reports/html --cov-report=xml:/app/coverage_reports/coverage.xml --cov-report=term --junit-xml=/app/test_results/junit.xml -v tests/ &&
+        echo 'Test run completed.'
+      "
+
+  # ====================================================================
+  # Integration Test Service
+  # ====================================================================
+  integration_test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: testing
+    container_name: temperature-integration-test
+    environment:
+      - ENVIRONMENT=testing
+      - DATABASE_URL=postgresql+asyncpg://postgres:test_password@test_db:5432/temperature_app_test
+      - REDIS_URL=redis://test_redis:6379/2
+      - SECRET_KEY=test-secret-key-for-testing-only-32-chars
+      - API_BASE_URL=http://app:8000
+    volumes:
+      - .:/app
+      - ./integration_test_results:/app/integration_test_results
+    depends_on:
+      app:
+        condition: service_healthy
+      test_db:
+        condition: service_healthy
+      test_redis:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - integration
+    command: >
+      sh -c "
+        echo 'Waiting for application to be ready...' &&
+        sleep 30 &&
+        echo 'Running integration tests...' &&
+        pytest --junit-xml=/app/integration_test_results/integration.xml tests/integration/ -v &&
+        echo 'Integration tests completed.'
+      "
+
+# ====================================================================
+# Test Volumes
+# ====================================================================
+volumes:
+  test_postgres_data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=256m
+      
+  test_redis_data:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m
+
+# ====================================================================
+# Test Network
+# ====================================================================
+networks:
+  test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+    labels:
+      - "project=temperature-app"
+      - "environment=testing" 

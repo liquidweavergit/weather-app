@@ -128,11 +128,31 @@ def print_result(passed: bool, message: str, indent: int = 0):
     print(f"{spaces}{icon} {message}")
 
 
+def check_docker_available() -> Tuple[bool, str]:
+    """Check if Docker is available for environment validation."""
+    try:
+        result = subprocess.run(
+            ["docker", "--version"], 
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return True, "Docker available for validation"
+        else:
+            return False, "Docker not available"
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False, "Docker not installed or not in PATH"
+    except Exception as e:
+        return False, f"Docker check error: {e}"
+
+
 def main():
     """Run all environment validation checks."""
     print("=" * 80)
     print("Temperature Display App - Environment Validation")
     print("=" * 80)
+    
+    # Check if we should run Docker validation
+    docker_validation = "--docker" in sys.argv or "-d" in sys.argv
     
     all_passed = True
     
@@ -181,14 +201,29 @@ def main():
     for passed, message in tool_results:
         print_result(passed, message, 1)
     
+    # Docker Integration Check
+    if docker_validation:
+        print("\n🐳 Docker Integration:")
+        passed, message = check_docker_available()
+        print_result(passed, message, 1)
+        if passed:
+            print("    💡 Run comprehensive Docker validation: python validate_docker_environment.py")
+        else:
+            print("    💡 Install Docker for container-based development")
+    
     # Summary
     print("\n" + "=" * 80)
     if all_passed and critical_deps_passed == len(dependency_results):
         print("🎉 Environment validation PASSED! Ready for development.")
         print("\nNext steps:")
         print("  1. ✅ Environment validation complete")
-        print("  2. ⏳ Run: git init")
-        print("  3. ⏳ Run: pytest tests/test_environment.py")
+        if docker_validation:
+            print("  2. ⏳ Run Docker validation: python validate_docker_environment.py")
+            print("  3. ⏳ Start services: ./docker-manage.sh start dev")
+        else:
+            print("  2. ⏳ Run: git init")
+            print("  3. ⏳ Run: pytest tests/test_environment.py")
+        print("  4. ⏳ Copy environment template: cp env.example .env")
     else:
         print("⚠️  Environment validation found issues.")
         print("\nRecommended actions:")
@@ -198,6 +233,8 @@ def main():
             print("  2. Install missing dependencies: pip install -r requirements.txt")
         print("  3. Configure environment variables (copy env.example to .env)")
         print("  4. Re-run this validation: python validate_environment.py")
+        if docker_validation:
+            print("  5. Check Docker setup: python validate_docker_environment.py")
     
     print("=" * 80)
     

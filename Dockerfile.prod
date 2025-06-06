@@ -1,0 +1,155 @@
+# Temperature Display App - Production Dockerfile
+# Ultra-optimized for production with minimal footprint and maximum security
+# Build with: docker build -f Dockerfile.prod -t temperature-app:prod .
+
+# ====================================================================
+# Builder Stage - Build dependencies and compile everything
+# ====================================================================
+FROM python:3.11-slim as builder
+
+# Build-time environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create build directory
+WORKDIR /build
+
+# Copy and install dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install --user --no-warn-script-location -r requirements.txt
+
+# Copy application source
+COPY . .
+
+# Remove development files
+RUN find . -type d -name "__pycache__" -delete \
+    && find . -type f -name "*.pyc" -delete \
+    && find . -type f -name "*.pyo" -delete \
+    && rm -rf tests/ docs/ .git/ .pytest_cache/ .mypy_cache/ \
+    && rm -f pytest.ini .gitignore .dockerignore README.md \
+    && rm -f Dockerfile* docker-compose* .env.example
+
+# Compile Python files for faster startup
+RUN python -m compileall -b . \
+    && find . -name "*.py" -delete
+
+# ====================================================================
+# Final Production Stage - Minimal runtime image
+# ====================================================================
+FROM python:3.11-slim as production
+
+# Production environment variables
+ENV ENVIRONMENT=production \
+    DEBUG=false \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONOPTIMIZE=2 \
+    PATH="/home/appuser/.local/bin:$PATH"
+
+# Add security labels
+LABEL org.opencontainers.image.title="Temperature Display App" \
+      org.opencontainers.image.description="Production FastAPI temperature display application" \
+      org.opencontainers.image.vendor="Temperature App Team" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.licenses="MIT"
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    # PostgreSQL client library only
+    libpq5 \
+    # Minimal curl for health checks
+    curl \
+    # Clean up aggressively
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/* \
+    && rm -rf /var/cache/apt/*
+
+# Create non-root user with minimal privileges
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --no-create-home --shell /sbin/nologin appuser \
+    && mkdir -p /home/appuser/.local \
+    && chown -R appuser:appuser /home/appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder --chown=root:root /root/.local /home/appuser/.local
+
+# Copy compiled application from builder
+COPY --from=builder --chown=appuser:appuser /build .
+
+# Create necessary runtime directories with restricted permissions
+RUN mkdir -p /app/logs \
+    && chown appuser:appuser /app/logs \
+    && chmod 750 /app/logs
+
+# Security hardening - remove unnecessary binaries and set file permissions
+RUN find /home/appuser/.local -type f -name "*.pyc" -exec chmod 644 {} \; \
+    && find /app -type f -name "*.pyc" -exec chmod 644 {} \; \
+    && find /app -type d -exec chmod 755 {} \; \
+    && chmod -R go-w /home/appuser/.local \
+    && chmod -R go-w /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose only the application port
+EXPOSE 8000
+
+# Health check with minimal overhead
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health --max-time 5 || exit 1
+
+# Production startup command with optimized Gunicorn settings
+CMD ["gunicorn", "app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
+     "--worker-connections", "1000", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "30", \
+     "--keep-alive", "2", \
+     "--max-requests", "2000", \
+     "--max-requests-jitter", "200", \
+     "--preload", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "warning", \
+     "--worker-tmp-dir", "/dev/shm"]
+
+# ====================================================================
+# Distroless Alternative (Optional) - Even more minimal
+# ====================================================================
+FROM gcr.io/distroless/python3-debian11 as distroless
+
+# Copy from builder stage
+COPY --from=builder --chown=nonroot:nonroot /root/.local /home/nonroot/.local
+COPY --from=builder --chown=nonroot:nonroot /build /app
+
+# Set environment
+ENV PYTHONPATH="/app:/home/nonroot/.local/lib/python3.11/site-packages" \
+    PATH="/home/nonroot/.local/bin:$PATH" \
+    ENVIRONMENT=production
+
+WORKDIR /app
+EXPOSE 8000
+USER nonroot
+
+# Minimal command for distroless (no shell available)
+ENTRYPOINT ["python", "-m", "gunicorn"]
+CMD ["app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "2", \
+     "--bind", "0.0.0.0:8000"] 

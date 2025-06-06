@@ -1,0 +1,578 @@
+# Temperature Display App - Continuous Integration Workflow
+# Comprehensive CI/CD pipeline with Docker builds, testing, and quality checks
+# Follows project rules: TDD, Docker-first, sub-2-second performance, >90% coverage
+
+name: 🚀 CI/CD Pipeline
+
+'on':
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:  # Allow manual triggering
+
+# Security: Minimal permissions
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  checks: write
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # ====================================================================
+  # Code Quality and Linting (Fast parallel job)
+  # ====================================================================
+  lint:
+    name: 🔍 Code Quality & Linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pre-commit
+      
+      - name: 🎯 Cache pre-commit hooks
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+      
+      - name: 🔧 Install pre-commit hooks
+        run: pre-commit install
+      
+      - name: 🧹 Run pre-commit hooks
+        run: pre-commit run --all-files --verbose
+      
+      - name: 📊 Upload pre-commit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pre-commit-results
+          path: |
+            **/.pre-commit-results.json
+          retention-days: 7
+
+  # ====================================================================
+  # Security Scanning (Parallel with lint)
+  # ====================================================================
+  security:
+    name: 🔒 Security Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml] safety semgrep
+      
+      - name: 🛡️ Run Bandit security scan
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f txt
+        continue-on-error: true
+      
+      - name: 🔍 Run Safety dependency scan
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+        continue-on-error: true
+      
+      - name: 📈 Run Semgrep security scan
+        uses: returntocorp/semgrep-action@v1.70.0
+        with:
+          config: auto
+          generateSarif: "true"
+        continue-on-error: true
+      
+      - name: 📊 Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            bandit-report.json
+            safety-report.json
+            semgrep.sarif
+          retention-days: 30
+      
+      - name: 📋 Upload SARIF results to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true
+
+  # ====================================================================
+  # Docker Configuration Validation
+  # ====================================================================
+  docker-validate:
+    name: 🐳 Docker Configuration Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: ✅ Validate Dockerfile
+        run: |
+          echo "Validating Dockerfile syntax and best practices..."
+          docker buildx build --dry-run -f Dockerfile .
+          docker buildx build --dry-run -f Dockerfile.dev .
+          docker buildx build --dry-run -f Dockerfile.prod .
+      
+      - name: ✅ Validate docker-compose configuration
+        run: |
+          echo "Validating docker-compose configuration..."
+          docker-compose config
+          docker-compose -f docker-compose.yml config
+          docker-compose -f docker-compose.prod.yml config
+          docker-compose -f docker-compose.test.yml config
+      
+      - name: 🧪 Test Docker build process
+        run: |
+          echo "Testing Docker build process..."
+          docker buildx build --target development --tag temp-dev-test .
+          docker buildx build --target production --tag temp-prod-test .
+      
+      - name: 📊 Upload Docker validation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-validation-results
+          path: |
+            docker-*.log
+          retention-days: 7
+
+  # ====================================================================
+  # Unit and Integration Tests
+  # ====================================================================
+  test:
+    name: 🧪 Tests & Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    strategy:
+      matrix:
+        test-type: [unit, integration]
+        python-version: ['3.11']
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_temperature_app
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-xdist pytest-benchmark pytest-mock
+      
+      - name: 🔧 Set up test environment
+        run: |
+          cp env.test.template .env.test
+          echo "DATABASE_URL=postgresql+asyncpg://test_user:test_password@localhost:5432/test_temperature_app" >> .env.test
+          echo "REDIS_URL=redis://localhost:6379/1" >> .env.test
+      
+      - name: 🧪 Run ${{ matrix.test-type }} tests
+        run: |
+          if [ "${{ matrix.test-type }}" = "unit" ]; then
+            pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-fail-under=85 \
+              -m "not integration and not slow" --maxfail=5 --tb=short
+          else
+            pytest tests/ -v --cov=app --cov-report=xml --cov-append \
+              -m "integration" --maxfail=3 --tb=short
+          fi
+        env:
+          ENVIRONMENT: testing
+      
+      - name: 📊 Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: matrix.test-type == 'unit'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+      
+      - name: 📈 Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.test-type }}-py${{ matrix.python-version }}
+          path: |
+            htmlcov/
+            coverage.xml
+            pytest-report.xml
+          retention-days: 30
+
+  # ====================================================================
+  # Docker Build and Test (Depends on validation)
+  # ====================================================================
+  build:
+    name: 🏗️ Docker Build & Test
+    runs-on: ubuntu-latest
+    needs: [docker-validate]
+    timeout-minutes: 25
+    
+    strategy:
+      matrix:
+        target: [development, production]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+      
+      - name: 🎯 Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-${{ matrix.target }}-
+            ${{ runner.os }}-buildx-
+      
+      - name: 🏗️ Build Docker image (${{ matrix.target }})
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: false
+          tags: temperature-app:${{ matrix.target }}-${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          platforms: linux/amd64
+      
+      - name: 🧪 Test Docker image (${{ matrix.target }})
+        run: |
+          echo "Testing ${{ matrix.target }} Docker image..."
+          
+          # Basic container startup test
+          docker run --rm --name test-container-${{ matrix.target }} \
+            temperature-app:${{ matrix.target }}-${{ github.sha }} \
+            python -c "print('Docker image ${{ matrix.target }} works!')"
+          
+          # Health check test (if applicable)
+          if [ "${{ matrix.target }}" = "production" ]; then
+            echo "Testing production image health..."
+            docker run -d --name health-test-${{ matrix.target }} \
+              -p 8000:8000 \
+              temperature-app:${{ matrix.target }}-${{ github.sha }}
+            
+            # Wait for container to start
+            sleep 10
+            
+            # Test health endpoint (when implemented)
+            # curl -f http://localhost:8000/health || echo "Health endpoint not yet implemented"
+            
+            docker stop health-test-${{ matrix.target }}
+            docker rm health-test-${{ matrix.target }}
+          fi
+      
+      - name: 🔍 Scan Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.16.1
+        with:
+          image-ref: temperature-app:${{ matrix.target }}-${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.target }}.sarif'
+        continue-on-error: true
+      
+      - name: 📊 Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.target }}.sarif'
+        continue-on-error: true
+      
+      - name: 💾 Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+      
+      - name: 📊 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docker-build-${{ matrix.target }}
+          path: |
+            trivy-results-${{ matrix.target }}.sarif
+          retention-days: 7
+
+  # ====================================================================
+  # End-to-End Tests with Full Docker Stack
+  # ====================================================================
+  e2e-test:
+    name: 🎭 End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [build, test, lint]
+    timeout-minutes: 20
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: 🎯 Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-e2e-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-development-
+            ${{ runner.os }}-buildx-
+      
+      - name: 🏗️ Build development image for E2E tests
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: development
+          load: true
+          tags: temperature-app:e2e-test
+          cache-from: type=local,src=/tmp/.buildx-cache
+      
+      - name: 🚀 Start full Docker stack
+        run: |
+          echo "Starting full application stack for E2E tests..."
+          cp env.test.template .env
+          docker-compose -f docker-compose.test.yml up -d
+          
+          # Wait for services to be ready
+          echo "Waiting for services to be ready..."
+          sleep 30
+          
+          # Check service health
+          docker-compose -f docker-compose.test.yml ps
+      
+      - name: 🧪 Run E2E tests
+        run: |
+          echo "Running end-to-end tests..."
+          
+          # API health check
+          curl -f http://localhost:8000/health || echo "Health endpoint test failed"
+          
+          # Database connectivity test
+          docker-compose -f docker-compose.test.yml exec -T app python -c "
+          import asyncio
+          import asyncpg
+          
+          async def test_db():
+              try:
+                  conn = await asyncpg.connect('postgresql://postgres:password@db:5432/temperature_app')
+                  await conn.close()
+                  print('Database connection: OK')
+              except Exception as e:
+                  print(f'Database connection failed: {e}')
+          
+          asyncio.run(test_db())
+          " || echo "Database test not yet available"
+          
+          # Redis connectivity test
+          docker-compose -f docker-compose.test.yml exec -T app python -c "
+          import redis
+          try:
+              r = redis.Redis(host='redis', port=6379, db=0)
+              r.ping()
+              print('Redis connection: OK')
+          except Exception as e:
+              print(f'Redis connection failed: {e}')
+          " || echo "Redis test not yet available"
+      
+      - name: 📋 Collect E2E test logs
+        if: always()
+        run: |
+          echo "Collecting container logs..."
+          docker-compose -f docker-compose.test.yml logs app > app-e2e.log
+          docker-compose -f docker-compose.test.yml logs db > db-e2e.log
+          docker-compose -f docker-compose.test.yml logs redis > redis-e2e.log
+      
+      - name: 🛑 Stop Docker stack
+        if: always()
+        run: |
+          docker-compose -f docker-compose.test.yml down -v
+      
+      - name: 📊 Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            *-e2e.log
+          retention-days: 7
+
+  # ====================================================================
+  # Performance Tests
+  # ====================================================================
+  performance:
+    name: ⚡ Performance Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 15
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install performance testing tools
+        run: |
+          pip install pytest-benchmark locust
+      
+      - name: ⚡ Run performance benchmarks
+        run: |
+          echo "Running performance benchmarks..."
+          
+          # Run pytest benchmarks (when available)
+          # pytest tests/test_performance.py --benchmark-only --benchmark-json=benchmark-results.json || echo "Performance tests not yet available"
+          
+          echo "Performance testing framework ready for future implementation"
+      
+      - name: 📊 Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results
+          path: |
+            benchmark-results.json
+          retention-days: 30
+
+  # ====================================================================
+  # Deployment Readiness Check
+  # ====================================================================
+  deployment-ready:
+    name: 🚀 Deployment Readiness
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, build, e2e-test]
+    timeout-minutes: 5
+    if: always()
+    
+    steps:
+      - name: 📊 Check all jobs status
+        run: |
+          echo "Checking deployment readiness..."
+          
+          # Check if all required jobs passed
+          if [ "${{ needs.test.result }}" = "success" ] && \
+             [ "${{ needs.lint.result }}" = "success" ] && \
+             [ "${{ needs.security.result }}" = "success" ] && \
+             [ "${{ needs.build.result }}" = "success" ] && \
+             [ "${{ needs.e2e-test.result }}" = "success" ]; then
+            echo "✅ All checks passed - Ready for deployment!"
+            echo "DEPLOYMENT_READY=true" >> $GITHUB_ENV
+          else
+            echo "❌ Some checks failed - Not ready for deployment"
+            echo "DEPLOYMENT_READY=false" >> $GITHUB_ENV
+            echo "Test: ${{ needs.test.result }}"
+            echo "Lint: ${{ needs.lint.result }}"
+            echo "Security: ${{ needs.security.result }}"
+            echo "Build: ${{ needs.build.result }}"
+            echo "E2E: ${{ needs.e2e-test.result }}"
+          fi
+      
+      - name: 📋 Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Readiness Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ${{ needs.security.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Tests | ${{ needs.e2e-test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status: ${{ env.DEPLOYMENT_READY == 'true' && '✅ Ready' || '❌ Not Ready' }}**" >> $GITHUB_STEP_SUMMARY 

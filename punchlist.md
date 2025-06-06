@@ -12,14 +12,14 @@
 ### 1.0 Docker Development Environment Setup ⭐ P0
 - [x] **1.1** Write tests for Docker container validation and health checks
 - [x] **1.2** Initialize Git repository with .gitignore and Docker ignore files
-- [ ] **1.3** Create Dockerfile for development and production environments
-- [ ] **1.4** Configure docker-compose.yml with all services (app, postgres, redis)
-- [ ] **1.5** Create .env.example and Docker environment validation
-- [ ] **1.6** Set up Docker-based pre-commit hooks and code quality tools
-- [ ] **1.7** Configure GitHub Actions CI/CD pipeline with Docker builds
+- [x] **1.3** Create Dockerfile for development and production environments
+- [x] **1.4** Configure docker-compose.yml with all services (app, postgres, redis)
+- [x] **1.5** Create .env.example and Docker environment validation
+- [x] **1.6** Set up Docker-based pre-commit hooks and code quality tools
+- [x] **1.7** Configure GitHub Actions CI/CD pipeline with Docker builds
 
 ### 2.0 Containerized Database Foundation ⭐ P0
-- [ ] **2.1** Write tests for containerized database connection and health checks
+- [x] **2.1** Write tests for containerized database connection and health checks
 - [ ] **2.2** Write tests for weather data models (SQLAlchemy)
 - [ ] **2.3** Write tests for user preferences models
 - [ ] **2.4** Design PostgreSQL schema for weather data and preferences

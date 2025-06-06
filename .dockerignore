@@ -144,6 +144,7 @@ dev.py
 local_settings.py
 *local*
 *dev*
+!dev-start.sh
 
 # Performance and monitoring
 performance/

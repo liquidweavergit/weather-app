@@ -1,0 +1,300 @@
+# Temperature Display App - Docker Compose Configuration
+# Orchestrates FastAPI app, PostgreSQL database, and Redis cache
+# Usage: docker-compose up --build
+
+services:
+  # ====================================================================
+  # FastAPI Application Service
+  # ====================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: temperature-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Application settings
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - RELOAD=true
+      
+      # Database connection (using service names)
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-temperature_app}
+      
+      # Redis cache connection (using service names)
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Security (use strong secret in production)
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production-32-chars-minimum}
+      
+      # Weather APIs (set these in .env file)
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+      - FALLBACK_WEATHER_API_KEY=${FALLBACK_WEATHER_API_KEY:-}
+      
+      # API configuration
+      - API_RATE_LIMIT=${API_RATE_LIMIT:-60}
+      - CACHE_TTL=${CACHE_TTL:-300}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      
+      # Optional geolocation service
+      - GEOLOCATION_API_KEY=${GEOLOCATION_API_KEY:-}
+      
+      # Application server settings
+      - APP_PORT=8000
+      - APP_HOST=0.0.0.0
+      
+    volumes:
+      # Mount source code for hot reload in development
+      - .:/app
+      # Exclude node_modules and Python cache
+      - /app/node_modules
+      - /app/__pycache__
+      # Mount logs for debugging
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - temperature-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.temperature-app.rule=Host(`localhost`)"
+      - "traefik.http.services.temperature-app.loadbalancer.server.port=8000"
+
+  # ====================================================================
+  # PostgreSQL Database Service
+  # ====================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: temperature-db
+    restart: unless-stopped
+    environment:
+      # Database credentials
+      - POSTGRES_DB=${POSTGRES_DB:-temperature_app}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      
+      # PostgreSQL configuration for better performance
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 --auth-local=scram-sha-256
+      
+    ports:
+      # Expose for development/debugging (comment out in production)
+      - "5432:5432"
+    volumes:
+      # Persistent data storage
+      - postgres_data:/var/lib/postgresql/data
+      
+      # Custom PostgreSQL configuration
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      
+      # Initialization scripts
+      - ./docker/postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      
+      # Backup directory
+      - ./backups:/backups
+    networks:
+      - temperature-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-temperature_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.max=10000
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  # ====================================================================
+  # Redis Cache Service
+  # ====================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: temperature-redis
+    restart: unless-stopped
+    environment:
+      # Redis configuration
+      - REDIS_MAXMEMORY=256mb
+      - REDIS_MAXMEMORY_POLICY=allkeys-lru
+    ports:
+      # Expose for development/debugging (comment out in production)
+      - "6379:6379"
+    volumes:
+      # Persistent cache storage (optional for development)
+      - redis_data:/data
+      
+      # Custom Redis configuration
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - temperature-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    security_opt:
+      - no-new-privileges:true
+
+  # ====================================================================
+  # Development Tools (Optional)
+  # ====================================================================
+  # PostgreSQL Admin Interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: temperature-pgadmin
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@temperature-app.local}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin}
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      - db
+    networks:
+      - temperature-network
+    profiles:
+      - dev-tools
+
+  # Redis Commander (Redis web UI)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: temperature-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=${REDIS_COMMANDER_USER:-admin}
+      - HTTP_PASSWORD=${REDIS_COMMANDER_PASSWORD:-admin}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - temperature-network
+    profiles:
+      - dev-tools
+
+  # ====================================================================
+  # Monitoring & Observability (Optional)
+  # ====================================================================
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: temperature-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - temperature-network
+    profiles:
+      - monitoring
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: temperature-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - temperature-network
+    profiles:
+      - monitoring
+
+# ====================================================================
+# Volumes for Persistent Data
+# ====================================================================
+volumes:
+  # Database data persistence
+  postgres_data:
+    driver: local
+      
+  # Redis data persistence (optional for development)
+  redis_data:
+    driver: local
+      
+  # pgAdmin configuration
+  pgadmin_data:
+    driver: local
+    
+  # Monitoring data
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ====================================================================
+# Networks
+# ====================================================================
+networks:
+  temperature-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    labels:
+      - "project=temperature-app" 

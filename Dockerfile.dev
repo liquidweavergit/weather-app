@@ -1,0 +1,145 @@
+# Temperature Display App - Development Dockerfile
+# Optimized for developer experience with debugging tools and hot reload
+# Build with: docker build -f Dockerfile.dev -t temperature-app:dev .
+# Run with: docker run -p 8000:8000 -v $(pwd):/app temperature-app:dev
+
+# Base stage with common dependencies
+FROM python:3.11-slim as base
+
+# Development stage
+FROM base as development
+
+# Development environment variables
+ENV ENVIRONMENT=development \
+    DEBUG=true \
+    RELOAD=true \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies for development
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential \
+    # PostgreSQL client and dev headers
+    libpq-dev \
+    postgresql-client \
+    # Development tools
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    htop \
+    tree \
+    # For debugging and profiling
+    gdb \
+    strace \
+    # Network debugging
+    netcat-openbsd \
+    telnet \
+    # Process management
+    procps \
+    # Timezone data
+    tzdata \
+    # Clean up
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user with sudo privileges for development
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser \
+    && apt-get update && apt-get install -y sudo \
+    && echo "appuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip
+
+# Install production dependencies
+RUN pip install -r requirements.txt
+
+# Install development and debugging tools
+RUN pip install \
+    # Enhanced REPL and debugging
+    ipython \
+    ipdb \
+    pdbpp \
+    # Development server with advanced reload
+    watchfiles \
+    # Enhanced testing tools
+    pytest-xdist \
+    pytest-sugar \
+    pytest-mock \
+    pytest-benchmark \
+    pytest-randomly \
+    pytest-clarity \
+    # Code quality and formatting
+    black[jupyter] \
+    isort \
+    mypy \
+    flake8 \
+    pylint \
+    bandit \
+    safety \
+    # Development utilities
+    python-dotenv \
+    rich \
+    typer \
+    # Performance profiling
+    py-spy \
+    memory-profiler \
+    line-profiler \
+    # Database tools
+    alembic \
+    # HTTP debugging
+    httpx[cli] \
+    # Jupyter for interactive development
+    jupyter \
+    # FastAPI development tools
+    fastapi-cli
+
+# Development startup script (copy before general copy)
+COPY --chown=appuser:appuser dev-start.sh /app/dev-start.sh
+
+# Copy application code (will be overridden by volume mount in development)
+COPY . .
+
+# Create directories for development
+RUN mkdir -p /app/logs /app/data /app/uploads \
+    && chown -R appuser:appuser /app \
+    && chmod +x /app/dev-start.sh
+
+# Install shell enhancements for better developer experience
+RUN echo 'alias ll="ls -la"' >> /home/appuser/.bashrc \
+    && echo 'alias la="ls -la"' >> /home/appuser/.bashrc \
+    && echo 'alias grep="grep --color=auto"' >> /home/appuser/.bashrc \
+    && echo 'export PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /home/appuser/.bashrc \
+    && echo 'export PYTHONPATH="/app:$PYTHONPATH"' >> /home/appuser/.bashrc
+
+# Configure git for development (will be overridden by user config)
+RUN git config --global user.name "Developer" \
+    && git config --global user.email "dev@temperature-app.local" \
+    && git config --global init.defaultBranch main
+
+# Switch to non-root user
+USER appuser
+
+# Expose port for development server
+EXPOSE 8000
+
+# Expose port for Jupyter (if needed)
+EXPOSE 8888
+
+# Health check for development with more lenient timeout
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=5 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command for development
+CMD ["/app/dev-start.sh"] 

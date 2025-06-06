@@ -14,6 +14,7 @@ redis==5.0.1
 
 # HTTP client for external APIs
 httpx==0.25.2
+requests==2.31.0
 
 # Data validation and serialization
 pydantic==2.5.0
@@ -45,10 +46,10 @@ gunicorn==21.2.0
 
 # Security
 python-multipart==0.0.6
-cryptography==41.0.8
+cryptography>=41.0.7
 
 # Rate limiting
 slowapi==0.1.9
 
-# CORS handling  
-python-cors==0.1.0 
+# CORS handling (built into FastAPI)
+# fastapi includes CORS middleware 
